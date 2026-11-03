@@ -1,7 +1,7 @@
 /*
  * Hand mode: MediaPipe HandLandmarker runs in the browser; the index fingertip
  * drives a cursor, a thumb–index pinch clicks, and swiping an open palm up or
- * down scrolls the page. Each frame is also broadcast as a "handframe" event so the hero
+ * down moves between sections. Each frame is also broadcast as a "handframe" event so the hero
  * stage can draw the visitor's hand as a graph.
  */
 const VISION = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
@@ -89,6 +89,7 @@ async function start() {
         runningMode: "VIDEO",
         numHands: 1,
         minHandDetectionConfidence: 0.6,
+        minHandPresenceConfidence: 0.6,
         minTrackingConfidence: 0.5,
       });
       try { landmarker = await HandLandmarker.createFromOptions(fileset, opts("GPU")); }
@@ -132,16 +133,25 @@ function stop() {
 // ------------------------------------------------------------------ per frame
 function loop() {
   if (!running) return;
-  if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
-    lastVideoTime = video.currentTime;
-    const res = landmarker.detectForVideo(video, performance.now());
-    const lm = res.landmarks && res.landmarks[0];
-    drawOverlay(lm);
-    if (lm) onHand(lm);
-    else onNoHand();
+  try {
+    if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+      lastVideoTime = video.currentTime;
+      const res = landmarker.detectForVideo(video, performance.now());
+      let lm = res.landmarks && res.landmarks[0];
+      // the tracker can hold a "ghost" hand at the border after it has left the frame
+      if (lm && outOfFrame(lm[9])) lm = null;
+      drawOverlay(lm);
+      if (lm) onHand(lm);
+      else onNoHand();
+    }
+  } catch (err) {
+    console.warn("hand mode frame skipped:", err);
+  } finally {
+    requestAnimationFrame(loop);   // one bad frame must never stop tracking
   }
-  requestAnimationFrame(loop);
 }
+
+const outOfFrame = (p) => p.x < -0.02 || p.x > 1.02 || p.y < -0.02 || p.y > 1.02;
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -209,20 +219,33 @@ function onHand(lm) {
   detectSwipe(lm[9].y, g.open);
 }
 
-// An open palm moving quickly up or down scrolls like a touch screen:
-// swipe up -> page moves on (scroll down), swipe down -> scroll back up.
+// An open palm moving quickly up or down works like a touch screen:
+// swipe up -> next section, swipe down -> previous section.
 function detectSwipe(palmY, openness) {
   const now = performance.now();
   // only open-palm motion counts, so pointing never leaves a half-built swipe behind
   if (pinched || openness < 0.6) { palmTrack = []; return; }
   palmTrack.push({ t: now, y: palmY });
   while (palmTrack.length && now - palmTrack[0].t > SWIPE_WINDOW) palmTrack.shift();
-  if (now < swipeLockUntil || palmTrack.length < 4) return;
-  const dy = palmY - palmTrack[0].y, dt = (now - palmTrack[0].t) / 1000;
-  if (Math.abs(dy) < SWIPE_DIST || Math.abs(dy) / Math.max(dt, 1e-3) < SWIPE_SPEED) return;
-  const dir = dy < 0 ? 1 : -1;
-  if (dir === -lastSwipeDir && now < reverseLockUntil) return;
-  scrollBy({ top: dir * innerHeight * 0.75, behavior: "smooth" });
+  const dir = swipeDir(palmTrack, SWIPE_DIST);
+  if (dir) swipe(dir, now);
+}
+
+// Direction of a fast vertical palm stroke in the track, or 0: enough travel
+// over the window, and still moving fast that way over the last few frames.
+function swipeDir(track, minDist) {
+  if (track.length < 3) return 0;
+  const a = track[0], b = track[track.length - 1], c = track[Math.max(0, track.length - 4)];
+  const dy = b.y - a.y;
+  const v = (b.y - c.y) / Math.max((b.t - c.t) / 1000, 1e-3);
+  if (Math.abs(dy) < minDist || Math.abs(v) < SWIPE_SPEED || Math.sign(v) !== Math.sign(dy)) return 0;
+  return dy < 0 ? 1 : -1;
+}
+
+function swipe(dir, now) {
+  palmTrack = [];
+  if (now < swipeLockUntil || (dir === -lastSwipeDir && now < reverseLockUntil)) return;
+  scrollStep(dir);
   const edge = dir > 0 ? edgeBottom : edgeTop;
   edge.classList.add("active");
   setTimeout(() => edge.classList.remove("active"), 450);
@@ -230,13 +253,38 @@ function detectSwipe(palmY, openness) {
   lastSwipeDir = dir;
   swipeLockUntil = now + 450;
   reverseLockUntil = now + 1100;
-  palmTrack = [];
+}
+
+// Jump to the start of the next/previous section. Inside a section taller than
+// the screen, step by most of a screen first so its content stays reachable.
+function scrollStep(dir) {
+  const pad = parseFloat(getComputedStyle(root).scrollPaddingTop) || 0;
+  const y = scrollY, vh = innerHeight, maxY = root.scrollHeight - vh;
+  const tops = Array.from(document.querySelectorAll("main > section"), (s) => Math.max(0, s.getBoundingClientRect().top + y - pad));
+  let i = 0;
+  tops.forEach((top, k) => { if (top <= y + 2) i = k; });
+  let target;
+  if (dir > 0) {
+    const next = i + 1 < tops.length ? tops[i + 1] : maxY;
+    target = next - y > vh * 1.1 ? y + vh * 0.85 : next;
+  } else if (y - tops[i] > 2) {
+    target = y - tops[i] > vh * 1.1 ? y - vh * 0.85 : tops[i];
+  } else {
+    target = i > 0 ? tops[i - 1] : 0;
+  }
+  scrollTo({ top: Math.max(0, Math.min(maxY, target)), behavior: "smooth" });
 }
 
 function onNoHand() {
   gestureEl.textContent = t("g.none");
+  // a fast stroke that carried the hand out of the frame still counts as a swipe
+  const now = performance.now();
+  const recent = palmTrack.length && now - palmTrack[palmTrack.length - 1].t < 150;
+  const dir = recent ? swipeDir(palmTrack, SWIPE_DIST * 0.6) : 0;
+  if (dir) swipe(dir, now);
   palmTrack = [];
-  if (performance.now() - lastSeen > 600) {
+  if (pinched) { pinched = false; cursor.classList.remove("pinch"); }
+  if (now - lastSeen > 600) {
     cursor.classList.add("lost");
     setHover(null);
   }
