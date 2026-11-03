@@ -14,7 +14,6 @@
   var rowsEl = document.getElementById("infer-rows");
   var dotsEl = document.getElementById("action-dots");
   var modeEl = document.getElementById("infer-mode");
-  var modelEl = document.getElementById("infer-model");
 
   var ACTIONS = ["morinkhuur", "drums", "conduct", "wave", "clap"];
   var ACTION_SECONDS = 5;
@@ -151,9 +150,10 @@
     W = r.width; H = r.height;
     canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    u = Math.min((H - 120) / 7.9, W / 5.2);
+    var compact = getComputedStyle(canvas).position !== "absolute";
+    u = Math.min((H - (compact ? 30 : 120)) / 7.9, W / 5.2);
     cx = W / 2;
-    cy = H - 78 - 2.9 * u;
+    cy = H - (compact ? 18 : 78) - 2.9 * u;
     prevPts = null; trails = {};
   }
 
@@ -395,7 +395,6 @@
 
   function setModeLabels(live) {
     modeEl.textContent = t(live ? "infer.live" : "infer.demo");
-    modelEl.textContent = live ? "MediaPipe Hands" : "STA-GCN";
     stage.classList.toggle("live", live);
   }
   var wasLive = false;

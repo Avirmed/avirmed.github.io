@@ -261,7 +261,7 @@ html[data-theme="dark"] .sun, html[data-theme="light"] .moon { display: none; }
 .infer-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--ink-2); }
 .infer-head .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: blink 1.2s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0.25; } }
-.infer-mode { margin-left: auto; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line-2); font-size: 10.5px; color: var(--ink-3); }
+.infer-mode { padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line-2); font-size: 10.5px; color: var(--ink-3); }
 .infer-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
 .infer-rows li { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; color: var(--ink-2); }
 .infer-rows li:first-child { color: var(--ink); font-weight: 500; }
@@ -294,7 +294,12 @@ html[data-theme="dark"] .sun, html[data-theme="light"] .moon { display: none; }
 @media (max-width: 900px) {
   .hero { padding-top: 96px; }
   .hero-grid { grid-template-columns: 1fr; }
-  .stage { aspect-ratio: 1 / 1.05; max-height: none; }
+  /* phones: panel, figure, action dots and caption stack instead of overlapping */
+  .stage { aspect-ratio: auto; max-height: none; display: flex; flex-direction: column; }
+  .infer { position: static; order: -1; width: auto; margin: 12px 12px 0; }
+  #skeleton { position: relative; height: 340px; flex: none; }
+  .actions { position: static; transform: none; justify-content: center; margin: 0 0 10px; }
+  .stage-cap { position: static; padding: 0 16px 16px; }
   .stats { grid-template-columns: repeat(2, auto); }
   .scroll-cue { display: none; }
 }

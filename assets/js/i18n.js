@@ -20,7 +20,7 @@ window.I18N = {
     "hero.cta2": "Энэ хуудсыг гараараа удирдах",
     "infer.demo": "демо",
     "infer.live": "таны гар · шууд",
-    "stage.cap": "Үе мөч хэр хурдан хөдөлнө, загвар төдий чинээ анхаарна: тэр хэмжээгээр гэрэлтэнэ. Үе дээр хулганаа аваачих, эсвэл дарж үйлдлийг солино уу.",
+    "stage.cap": "Хурдан хөдөлж буй үе мөч илүү гэрэлтэнэ. Дарж үйлдлийг солино уу.",
 
     "about.kicker": "01 — Танилцуулга",
     "about.title": "Хүн ба компьютерийн харилцаа.",
@@ -115,7 +115,7 @@ window.I18N = {
     "hero.cta2": "Control this page with your hand",
     "infer.demo": "demo",
     "infer.live": "your hand · live",
-    "stage.cap": "Joints glow with attention — the faster they move, the more the model looks. Hover a joint, or click to switch action.",
+    "stage.cap": "Faster-moving joints glow brighter. Tap to switch action.",
 
     "about.kicker": "01 — About",
     "about.title": "Where human movement meets machine perception.",
