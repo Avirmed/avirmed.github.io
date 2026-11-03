@@ -1,8 +1,12 @@
 /*
- * Hand mode: MediaPipe HandLandmarker runs in the browser; the index fingertip
- * drives a cursor, a thumb–index pinch clicks, and swiping an open palm up or
- * down moves between sections. Each frame is also broadcast as a "handframe" event so the hero
- * stage can draw the visitor's hand as a graph.
+ * Hand mode: MediaPipe HandLandmarker runs in the browser.
+ * - The index-finger knuckle (MCP) drives a smoothed cursor; unlike the
+ *   fingertip it stays still while the fingers pinch.
+ * - Two quick thumb–index pinches click.
+ * - Pinch and hold, then move the hand: up scrolls the page down, down scrolls
+ *   it up; releasing lets it glide to a stop.
+ * Each frame is also broadcast as a "handframe" event so the hero stage can
+ * draw the visitor's hand as a graph.
  */
 const VISION = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
@@ -17,32 +21,31 @@ const overlay = $("#hand-overlay");
 const octx = overlay.getContext("2d");
 const cursor = $("#hand-cursor");
 const gestureEl = $("#pip-gesture");
-const edgeTop = $("#edge-top");
-const edgeBottom = $("#edge-bottom");
 
 const BONES = [
   [0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
   [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17],
 ];
-const SWIPE_WINDOW = 260;   // ms of palm motion considered for one swipe
-const SWIPE_DIST = 0.16;    // palm travel, as a fraction of the camera frame height
-const SWIPE_SPEED = 0.9;    // frame heights per second
-const PINCH_DOWN = 0.32;    // pinch distance / palm size
+const PINCH_DOWN = 0.32;    // thumb–index distance / palm size
 const PINCH_UP = 0.46;
+const HOLD_MS = 280;        // a pinch held this long starts scrolling
+const TAP_MAX_MS = 260;     // a pinch released sooner than this is a tap
+const DOUBLE_MS = 500;      // two taps within this window click
+const SCROLL_GAIN = 2.4;    // page pixels per pixel of hand travel
+const GLIDE = 0.92;         // momentum kept per frame after a scroll
 
 let landmarker = null;
 let stream = null;
 let running = false;
 let lastVideoTime = -1;
-let pos = { x: innerWidth / 2, y: innerHeight / 2 };
-let pinched = false;
+let pos = null;             // smoothed cursor, px
+let lastFrameT = 0;
 let lastSeen = 0;
 let hovered = null;
 let lastTrigger = null;
-let palmTrack = [];
-let swipeLockUntil = 0;     // short pause between swipes
-let reverseLockUntil = 0;   // ignores the hand travelling back after a swipe
-let lastSwipeDir = 0;
+let pinch = { down: false, since: 0, lastY: 0, vel: 0, scrolling: false, lastTap: 0 };
+let glide = 0;
+let flashUntil = 0;
 
 // ------------------------------------------------------------------ UI wiring
 document.querySelectorAll("[data-hand-toggle]").forEach((b) =>
@@ -124,8 +127,9 @@ function stop() {
   cursor.hidden = true;
   root.classList.remove("hand-on");
   setHover(null);
-  edgeTop.classList.remove("active");
-  edgeBottom.classList.remove("active");
+  releasePinch();
+  glide = 0;
+  pos = null;
   toast(t("hm.off"));
   dispatchEvent(new CustomEvent("handmode", { detail: { on: false } }));
 }
@@ -144,6 +148,10 @@ function loop() {
       if (lm) onHand(lm);
       else onNoHand();
     }
+    if (glide) {
+      scrollBy({ top: glide, behavior: "instant" });
+      glide = Math.abs(glide) < 0.4 ? 0 : glide * GLIDE;
+    }
   } catch (err) {
     console.warn("hand mode frame skipped:", err);
   } finally {
@@ -152,7 +160,6 @@ function loop() {
 }
 
 const outOfFrame = (p) => p.x < -0.02 || p.x > 1.02 || p.y < -0.02 || p.y > 1.02;
-
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -163,7 +170,6 @@ function extension(lm, tip, pip) {
 
 function gestures(lm) {
   const palm = Math.max(dist(lm[0], lm[9]), 1e-4);
-  const pinch = dist(lm[4], lm[8]) / palm;
   const e = {
     thumb: clamp((dist(lm[4], lm[17]) / Math.max(dist(lm[3], lm[17]), 1e-4) - 1) / 0.4, 0, 1),
     index: extension(lm, 8, 6),
@@ -171,120 +177,125 @@ function gestures(lm) {
     ring: extension(lm, 16, 14),
     pinky: extension(lm, 20, 18),
   };
+  // In a fist the thumb rests on the curled index finger, which would read as a
+  // pinch; a real pinch keeps the index fingertip out beyond its PIP joint.
+  const indexOut = dist(lm[0], lm[8]) > dist(lm[0], lm[6]) * 0.95;
+  const pinchRatio = indexOut ? dist(lm[4], lm[8]) / palm : Infinity;
+  const curled = (1 - e.index) * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky);
+  // thumbs-up: thumb tip clearly above its own joints and the index knuckle
+  const thumbUp = lm[4].y < lm[3].y && lm[3].y < lm[2].y ? clamp(((lm[5].y - lm[4].y) / palm - 0.25) / 0.5, 0, 1) : 0;
   const raw = {
     point: e.index * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky),
     victory: e.index * e.middle * (1 - e.ring) * (1 - e.pinky),
+    middle: e.middle * (1 - e.index) * (1 - e.ring) * (1 - e.pinky),
     open: Math.pow((e.thumb + e.index + e.middle + e.ring + e.pinky) / 5, 2),
-    fist: (1 - e.index) * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky),
-    pinch: clamp((0.5 - pinch) / 0.3, 0, 1),
+    like: curled * thumbUp,
+    fist: curled * (1 - thumbUp),
+    pinch: clamp((0.5 - pinchRatio) / 0.3, 0, 1),
   };
   const sum = Object.values(raw).reduce((a, b) => a + b, 0) + 0.05;
   const scores = {};
   for (const k in raw) scores[k] = raw[k] / sum;
-  return { pinch, scores, open: (e.index + e.middle + e.ring + e.pinky) / 4 };
+  return { pinchRatio, scores };
+}
+
+// Map the index knuckle to the screen: the central 0.3–0.8 of the camera frame
+// covers the whole viewport, so small hand movements reach every corner.
+function knuckleToScreen(p) {
+  return {
+    x: clamp((1 - p.x - 0.3) * 2, 0, 1) * innerWidth,
+    y: clamp((p.y - 0.3) * 2, 0, 1) * innerHeight,
+  };
+}
+
+// Exponential moving average that follows faster when the hand moves faster:
+// a resting hand is held steady, a quick move is not left lagging behind.
+function smooth(prev, target, dt) {
+  if (!prev) return { ...target };
+  const speed = Math.hypot(target.x - prev.x, target.y - prev.y) / Math.max(dt, 1e-3);
+  const a30 = 0.12 + Math.min(0.45, speed / 4000);         // per frame at 30 fps
+  const a = 1 - Math.pow(1 - a30, dt * 30);
+  return { x: prev.x + (target.x - prev.x) * a, y: prev.y + (target.y - prev.y) * a };
+}
+
+// Pinch input as a small state machine. Returns the new state and what happened.
+function pinchStep(s, isDown, y, now) {
+  if (isDown && !s.down) {
+    return { s: { ...s, down: true, since: now, lastY: y, vel: 0, scrolling: false }, act: "press" };
+  }
+  if (isDown && s.down) {
+    if (!s.scrolling) {
+      if (now - s.since < HOLD_MS) return { s, act: null };
+      return { s: { ...s, scrolling: true, lastY: y, vel: 0 }, act: "scroll-start" };
+    }
+    const dy = (s.lastY - y) * SCROLL_GAIN;                  // hand up -> page down
+    return { s: { ...s, lastY: y, vel: s.vel * 0.6 + dy * 0.4 }, act: "scroll", amount: dy };
+  }
+  if (!isDown && s.down) {
+    const up = { ...s, down: false, scrolling: false };
+    if (s.scrolling) return { s: { ...up, lastTap: 0 }, act: "scroll-end", amount: s.vel };
+    if (now - s.since > TAP_MAX_MS) return { s: { ...up, lastTap: 0 }, act: null };
+    if (s.lastTap && now - s.lastTap <= DOUBLE_MS) return { s: { ...up, lastTap: 0 }, act: "click" };
+    return { s: { ...up, lastTap: now }, act: "tap" };
+  }
+  return { s, act: null };
 }
 
 function onHand(lm) {
-  lastSeen = performance.now();
+  const now = performance.now();
+  const dt = Math.min(0.1, (now - (lastFrameT || now)) / 1000) || 1 / 30;
+  lastFrameT = now;
+  lastSeen = now;
   cursor.classList.remove("lost");
 
-  // Map the comfortable centre of the camera frame to the whole viewport (mirrored).
-  const tip = lm[8];
-  const tx = clamp((1 - tip.x - 0.15) / 0.7, 0, 1) * innerWidth;
-  const ty = clamp((tip.y - 0.15) / 0.65, 0, 1) * innerHeight;
-  const k = 0.35;
-  pos.x += (tx - pos.x) * k;
-  pos.y += (ty - pos.y) * k;
+  pos = smooth(pos, knuckleToScreen(lm[5]), dt);
   cursor.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
 
   const g = gestures(lm);
-  const top = Object.entries(g.scores).sort((a, b) => b[1] - a[1])[0][0];
-  gestureEl.textContent = t("g." + top);
   dispatchEvent(new CustomEvent("handframe", { detail: { pts: lm.map((p) => ({ x: p.x, y: p.y })), scores: g.scores } }));
 
-  // pinch with hysteresis -> click
-  if (!pinched && g.pinch < PINCH_DOWN) {
-    pinched = true;
-    cursor.classList.add("pinch");
-    click(pos.x, pos.y);
-  } else if (pinched && g.pinch > PINCH_UP) {
-    pinched = false;
-    cursor.classList.remove("pinch");
+  // pinch with hysteresis
+  const isDown = pinch.down ? g.pinchRatio < PINCH_UP : g.pinchRatio < PINCH_DOWN;
+  const r = pinchStep(pinch, isDown, pos.y, now);
+  pinch = r.s;
+  if (r.act === "press") { glide = 0; cursor.classList.add("pinch"); }
+  if (r.act === "scroll-start") cursor.classList.add("scroll");
+  if (r.act === "scroll") scrollBy({ top: r.amount, behavior: "instant" });
+  if (r.act === "scroll-end") glide = r.amount;
+  if (r.act === "tap") flash("tap", t("g.pinch") + " ×1", now);
+  if (r.act === "click") { flash("click", "Click", now); click(pos.x, pos.y); }
+  if (!pinch.down) cursor.classList.remove("pinch", "scroll");
+
+  if (pinch.scrolling) gestureEl.textContent = "Scroll ↕";
+  else if (now > flashUntil) {
+    const top = Object.entries(g.scores).sort((a, b) => b[1] - a[1])[0][0];
+    gestureEl.textContent = t("g." + top);
   }
 
   // hover target
   const el = document.elementFromPoint(pos.x, pos.y);
   setHover(el ? el.closest("a, button, input, [data-tilt], .pub") : null);
-
-  detectSwipe(lm[9].y, g.open);
 }
 
-// An open palm moving quickly up or down works like a touch screen:
-// swipe up -> next section, swipe down -> previous section.
-function detectSwipe(palmY, openness) {
-  const now = performance.now();
-  // only open-palm motion counts, so pointing never leaves a half-built swipe behind
-  if (pinched || openness < 0.6) { palmTrack = []; return; }
-  palmTrack.push({ t: now, y: palmY });
-  while (palmTrack.length && now - palmTrack[0].t > SWIPE_WINDOW) palmTrack.shift();
-  const dir = swipeDir(palmTrack, SWIPE_DIST);
-  if (dir) swipe(dir, now);
+function flash(cls, label, now) {
+  cursor.classList.remove("tap", "click");
+  void cursor.offsetWidth;   // restart the CSS animation
+  cursor.classList.add(cls);
+  gestureEl.textContent = label;
+  flashUntil = now + 500;
 }
 
-// Direction of a fast vertical palm stroke in the track, or 0: enough travel
-// over the window, and still moving fast that way over the last few frames.
-function swipeDir(track, minDist) {
-  if (track.length < 3) return 0;
-  const a = track[0], b = track[track.length - 1], c = track[Math.max(0, track.length - 4)];
-  const dy = b.y - a.y;
-  const v = (b.y - c.y) / Math.max((b.t - c.t) / 1000, 1e-3);
-  if (Math.abs(dy) < minDist || Math.abs(v) < SWIPE_SPEED || Math.sign(v) !== Math.sign(dy)) return 0;
-  return dy < 0 ? 1 : -1;
-}
-
-function swipe(dir, now) {
-  palmTrack = [];
-  if (now < swipeLockUntil || (dir === -lastSwipeDir && now < reverseLockUntil)) return;
-  scrollStep(dir);
-  const edge = dir > 0 ? edgeBottom : edgeTop;
-  edge.classList.add("active");
-  setTimeout(() => edge.classList.remove("active"), 450);
-  gestureEl.textContent = "Swipe " + (dir > 0 ? "↑" : "↓");
-  lastSwipeDir = dir;
-  swipeLockUntil = now + 450;
-  reverseLockUntil = now + 1100;
-}
-
-// Jump to the start of the next/previous section. Inside a section taller than
-// the screen, step by most of a screen first so its content stays reachable.
-function scrollStep(dir) {
-  const pad = parseFloat(getComputedStyle(root).scrollPaddingTop) || 0;
-  const y = scrollY, vh = innerHeight, maxY = root.scrollHeight - vh;
-  const tops = Array.from(document.querySelectorAll("main > section"), (s) => Math.max(0, s.getBoundingClientRect().top + y - pad));
-  let i = 0;
-  tops.forEach((top, k) => { if (top <= y + 2) i = k; });
-  let target;
-  if (dir > 0) {
-    const next = i + 1 < tops.length ? tops[i + 1] : maxY;
-    target = next - y > vh * 1.1 ? y + vh * 0.85 : next;
-  } else if (y - tops[i] > 2) {
-    target = y - tops[i] > vh * 1.1 ? y - vh * 0.85 : tops[i];
-  } else {
-    target = i > 0 ? tops[i - 1] : 0;
-  }
-  scrollTo({ top: Math.max(0, Math.min(maxY, target)), behavior: "smooth" });
+function releasePinch() {
+  if (pinch.scrolling) glide = pinch.vel;
+  pinch = { ...pinch, down: false, scrolling: false };
+  cursor.classList.remove("pinch", "scroll");
 }
 
 function onNoHand() {
   gestureEl.textContent = t("g.none");
-  // a fast stroke that carried the hand out of the frame still counts as a swipe
-  const now = performance.now();
-  const recent = palmTrack.length && now - palmTrack[palmTrack.length - 1].t < 150;
-  const dir = recent ? swipeDir(palmTrack, SWIPE_DIST * 0.6) : 0;
-  if (dir) swipe(dir, now);
-  palmTrack = [];
-  if (pinched) { pinched = false; cursor.classList.remove("pinch"); }
-  if (now - lastSeen > 600) {
+  releasePinch();
+  lastFrameT = 0;
+  if (performance.now() - lastSeen > 600) {
     cursor.classList.add("lost");
     setHover(null);
   }
@@ -324,9 +335,10 @@ function drawOverlay(lm) {
     octx.stroke();
   });
   lm.forEach((p, i) => {
-    octx.fillStyle = i === 8 || i === 4 ? accent : "#ffffff";
+    const key = i === 4 || i === 8 || i === 5;   // pinch tips and the cursor knuckle
+    octx.fillStyle = key ? accent : "#ffffff";
     octx.beginPath();
-    octx.arc(p.x * w, p.y * h, i === 8 || i === 4 ? 7 : 4, 0, Math.PI * 2);
+    octx.arc(p.x * w, p.y * h, key ? 7 : 4, 0, Math.PI * 2);
     octx.fill();
   });
 }

@@ -40,11 +40,16 @@
         "    if np.linalg.norm(lm[4] - lm[8]) / palm < 0.32:",
         '        return "pinch"',
         "    up = fingers_up(lm)",
+        "    if not any(up):",
+        "        thumb_up = lm[4][1] < lm[3][1] < lm[2][1] < lm[5][1]   # y grows downward",
+        '        return "like" if thumb_up else "fist"',
         "    if up == [True, False, False, False]:",
         '        return "point"',
+        "    if up == [False, True, False, False]:",
+        '        return "..."                                     # 😅',
         "    if up == [True, True, False, False]:",
         '        return "victory"',
-        '    return "open" if all(up) else "fist" if not any(up) else "hand"',
+        '    return "open" if all(up) else "hand"',
         "",
         "",
         "cap = cv2.VideoCapture(0)",
@@ -79,11 +84,15 @@
         "",
         "function loop() {",
         "  const res = hands.detectForVideo(video, performance.now());",
-        "  const lm = res.landmarks[0];               // 21 points in [0, 1]",
+        "  const lm = res.landmarks[0];                  // 21 points in [0, 1]",
         "  if (lm) {",
-        "    moveCursor(1 - lm[8].x, lm[8].y);         // mirrored selfie view",
-        "    const pinch = dist(lm[4], lm[8]) / dist(lm[0], lm[9]);",
-        "    if (!pinched && pinch < 0.32) click();     // hysteresis: release > 0.46",
+        "    // the index knuckle stays still while pinching, unlike the fingertip",
+        "    cursor = smooth(cursor, toScreen(1 - lm[5].x, lm[5].y));",
+        "    const pinched = dist(lm[4], lm[8]) / dist(lm[0], lm[9]) < 0.32;",
+        "    const act = pinchStep(pinched, cursor.y);",
+        '    if (act === "click") click(cursor);           // two quick pinches',
+        '    if (act === "scroll") scrollBy(0, (lastY - cursor.y) * 2.4);  // hold + move',
+        "    lastY = cursor.y;",
         "  }",
         "  requestAnimationFrame(loop);",
         "}",
@@ -309,7 +318,7 @@
     lastLine = now;
     var sc = e.detail.scores, g = Object.keys(sc).sort(function (a, b) { return sc[b] - sc[a]; })[0];
     var tip = e.detail.pts[8];
-    var line = "frame " + String(frameNo).padStart(5, "0") + "  gesture=" + (g + "        ").slice(0, 8) + " tip=(" + tip.x.toFixed(2) + ", " + tip.y.toFixed(2) + ")";
+    var line = "frame " + String(frameNo).padStart(5, "0") + "  gesture=" + ((g === "middle" ? "...😅" : g) + "        ").slice(0, 8) + " tip=(" + tip.x.toFixed(2) + ", " + tip.y.toFixed(2) + ")";
     print(line, g === "pinch" ? "hl" : "");
     while (out.childElementCount > 250) out.removeChild(out.firstChild);
   });

@@ -638,12 +638,13 @@ html[data-theme="dark"] .sun, html[data-theme="light"] .moon { display: none; }
 }
 .hand-cursor span::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: var(--accent); }
 .hand-cursor.pinch span { transform: scale(0.6); background: var(--accent); }
+.hand-cursor.scroll span { transform: scale(0.85, 1.35); border-radius: 14px; background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.hand-cursor.tap span { animation: hc-tap 0.35s var(--ease); }
+.hand-cursor.click span { animation: hc-click 0.45s var(--ease); }
+@keyframes hc-tap { 50% { box-shadow: 0 0 0 10px var(--glow); } }
+@keyframes hc-click { 0% { box-shadow: 0 0 0 0 var(--accent); } 100% { box-shadow: 0 0 0 26px transparent; } }
 .hand-cursor.lost span { opacity: 0.25; }
 .is-hand-hover { outline: 2px solid var(--accent) !important; outline-offset: 3px; }
-.edge { position: fixed; left: 0; right: 0; height: 12vh; z-index: 65; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
-.edge-top { top: 0; background: linear-gradient(var(--glow), transparent); }
-.edge-bottom { bottom: 0; background: linear-gradient(transparent, var(--glow)); }
-html.hand-on .edge.active { opacity: 1; }
 
 /* ==========================================================================
    Motion & print

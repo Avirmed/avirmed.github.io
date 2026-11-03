@@ -69,9 +69,9 @@ window.I18N = {
 
     "hm.title": "Энэ хуудсыг гараараа удирдах",
     "hm.body": "Гар таних загвар (MediaPipe) зөвхөн таны хөтөч дотор ажиллана. Камерын дүрс таны төхөөрөмжөөс хаашаа ч гарахгүй.",
-    "hm.g1": "Долоовор хуруугаараа заахад курсор хөдөлнө",
-    "hm.g2": "Эрхий, долоовор хуруугаа чимхвэл дарна",
-    "hm.g3": "Алгаа дэлгээд дээш, доош шударч хэсэг хооронд шилжинэ",
+    "hm.g1": "Гараа хөдөлгөхөд курсор долоовор хурууны үеийг дагана",
+    "hm.g2": "Хоёр удаа хурдан чимхвэл дарна",
+    "hm.g3": "Чимхээд барьж байгаад гараа дээш, доош хөдөлгөвөл гүйлгэнэ",
     "hm.g4": "Esc эсвэл ✕ дарж зогсооно",
     "hm.cancel": "Дараа",
     "hm.start": "Камер асаах",
@@ -85,6 +85,8 @@ window.I18N = {
     "g.pinch": "Чимхэх",
     "g.open": "Дэлгэсэн алга",
     "g.fist": "Нударга",
+    "g.like": "Лайк 👍",
+    "g.middle": "...😅",
     "g.victory": "Ялалт ✌",
     "g.none": "Гар алга",
 
@@ -164,9 +166,9 @@ window.I18N = {
 
     "hm.title": "Control this page with your hand",
     "hm.body": "A hand-tracking model (MediaPipe) runs entirely in your browser. No video ever leaves your device.",
-    "hm.g1": "Point with your index finger to move the cursor",
-    "hm.g2": "Pinch thumb and index finger to click",
-    "hm.g3": "Swipe an open palm up or down to move between sections",
+    "hm.g1": "Move your hand — the cursor follows your index knuckle",
+    "hm.g2": "Pinch twice quickly to click",
+    "hm.g3": "Pinch and hold, then move your hand up or down to scroll",
     "hm.g4": "Press Esc or ✕ to stop",
     "hm.cancel": "Not now",
     "hm.start": "Turn on camera",
@@ -180,6 +182,8 @@ window.I18N = {
     "g.pinch": "Pinch",
     "g.open": "Open palm",
     "g.fist": "Fist",
+    "g.like": "Like 👍",
+    "g.middle": "...😅",
     "g.victory": "Victory ✌",
     "g.none": "No hand",
 
