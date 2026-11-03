@@ -31,7 +31,7 @@ const PINCH_UP = 0.46;
 const HOLD_MS = 280;        // a pinch held this long starts scrolling
 const TAP_MAX_MS = 260;     // a pinch released sooner than this is a tap
 const DOUBLE_MS = 500;      // two taps within this window click
-const SCROLL_GAIN = 1.5;    // page pixels per pixel of hand travel
+const SCROLL_GAIN = 1.9;    // page pixels per pixel of hand travel
 const GLIDE = 0.9;          // momentum kept per frame after a scroll
 
 let landmarker = null;
