@@ -1,7 +1,7 @@
 /*
  * Hand mode: MediaPipe HandLandmarker runs in the browser; the index fingertip
- * drives a cursor, a thumb–index pinch clicks, and pointing at the top/bottom
- * edge scrolls. Each frame is also broadcast as a "handframe" event so the hero
+ * drives a cursor, a thumb–index pinch clicks, and swiping an open palm up or
+ * down scrolls the page. Each frame is also broadcast as a "handframe" event so the hero
  * stage can draw the visitor's hand as a graph.
  */
 const VISION = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
@@ -24,7 +24,9 @@ const BONES = [
   [0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
   [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17],
 ];
-const EDGE = 0.12;          // fraction of viewport height that triggers scrolling
+const SWIPE_WINDOW = 260;   // ms of palm motion considered for one swipe
+const SWIPE_DIST = 0.16;    // palm travel, as a fraction of the camera frame height
+const SWIPE_SPEED = 0.9;    // frame heights per second
 const PINCH_DOWN = 0.32;    // pinch distance / palm size
 const PINCH_UP = 0.46;
 
@@ -37,6 +39,10 @@ let pinched = false;
 let lastSeen = 0;
 let hovered = null;
 let lastTrigger = null;
+let palmTrack = [];
+let swipeLockUntil = 0;     // short pause between swipes
+let reverseLockUntil = 0;   // ignores the hand travelling back after a swipe
+let lastSwipeDir = 0;
 
 // ------------------------------------------------------------------ UI wiring
 document.querySelectorAll("[data-hand-toggle]").forEach((b) =>
@@ -165,7 +171,7 @@ function gestures(lm) {
   const sum = Object.values(raw).reduce((a, b) => a + b, 0) + 0.05;
   const scores = {};
   for (const k in raw) scores[k] = raw[k] / sum;
-  return { pinch, scores };
+  return { pinch, scores, open: (e.index + e.middle + e.ring + e.pinky) / 4 };
 }
 
 function onHand(lm) {
@@ -200,22 +206,38 @@ function onHand(lm) {
   const el = document.elementFromPoint(pos.x, pos.y);
   setHover(el ? el.closest("a, button, input, [data-tilt], .pub") : null);
 
-  // edge scrolling
-  const yN = pos.y / innerHeight;
-  edgeTop.classList.toggle("active", yN < EDGE);
-  edgeBottom.classList.toggle("active", yN > 1 - EDGE);
-  if (!pinched) {
-    if (yN < EDGE) scrollBy(0, -Math.round(((EDGE - yN) / EDGE) * 22 + 4));
-    else if (yN > 1 - EDGE) scrollBy(0, Math.round(((yN - (1 - EDGE)) / EDGE) * 22 + 4));
-  }
+  detectSwipe(lm[9].y, g.open);
+}
+
+// An open palm moving quickly up or down scrolls like a touch screen:
+// swipe up -> page moves on (scroll down), swipe down -> scroll back up.
+function detectSwipe(palmY, openness) {
+  const now = performance.now();
+  // only open-palm motion counts, so pointing never leaves a half-built swipe behind
+  if (pinched || openness < 0.6) { palmTrack = []; return; }
+  palmTrack.push({ t: now, y: palmY });
+  while (palmTrack.length && now - palmTrack[0].t > SWIPE_WINDOW) palmTrack.shift();
+  if (now < swipeLockUntil || palmTrack.length < 4) return;
+  const dy = palmY - palmTrack[0].y, dt = (now - palmTrack[0].t) / 1000;
+  if (Math.abs(dy) < SWIPE_DIST || Math.abs(dy) / Math.max(dt, 1e-3) < SWIPE_SPEED) return;
+  const dir = dy < 0 ? 1 : -1;
+  if (dir === -lastSwipeDir && now < reverseLockUntil) return;
+  scrollBy({ top: dir * innerHeight * 0.75, behavior: "smooth" });
+  const edge = dir > 0 ? edgeBottom : edgeTop;
+  edge.classList.add("active");
+  setTimeout(() => edge.classList.remove("active"), 450);
+  gestureEl.textContent = "Swipe " + (dir > 0 ? "↑" : "↓");
+  lastSwipeDir = dir;
+  swipeLockUntil = now + 450;
+  reverseLockUntil = now + 1100;
+  palmTrack = [];
 }
 
 function onNoHand() {
   gestureEl.textContent = t("g.none");
+  palmTrack = [];
   if (performance.now() - lastSeen > 600) {
     cursor.classList.add("lost");
-    edgeTop.classList.remove("active");
-    edgeBottom.classList.remove("active");
     setHover(null);
   }
 }

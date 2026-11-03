@@ -638,7 +638,6 @@ html[data-theme="dark"] .sun, html[data-theme="light"] .moon { display: none; }
 .edge { position: fixed; left: 0; right: 0; height: 12vh; z-index: 65; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
 .edge-top { top: 0; background: linear-gradient(var(--glow), transparent); }
 .edge-bottom { bottom: 0; background: linear-gradient(transparent, var(--glow)); }
-html.hand-on .edge { opacity: 0.35; }
 html.hand-on .edge.active { opacity: 1; }
 
 /* ==========================================================================
