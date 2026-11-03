@@ -574,8 +574,7 @@ html[data-theme="dark"] .sun, html[data-theme="light"] .moon { display: none; }
    Contact
    ========================================================================== */
 .contact { text-align: left; overflow: hidden; }
-.contact-title { font-size: clamp(2.1rem, 5.6vw, 4.6rem); max-width: 16ch; letter-spacing: -0.035em; margin-bottom: 20px; }
-.contact-sub { color: var(--ink-2); font-size: 1.1rem; margin-bottom: 40px; }
+.contact-title { font-size: clamp(2.1rem, 5.6vw, 4.6rem); max-width: 16ch; letter-spacing: -0.035em; margin-bottom: 40px; }
 .links { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .link {
   display: flex; align-items: center; gap: 14px; padding: 18px 20px; border-radius: 16px; text-decoration: none;

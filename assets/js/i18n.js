@@ -65,7 +65,6 @@ window.I18N = {
 
     "contact.kicker": "06 — Холбоо барих",
     "contact.title": "Хүнийг ойлгодог интерфейсийг хамтдаа бүтээе.",
-    "contact.sub": "Судалгааны хамтын ажиллагаа, оюутан удирдах, илтгэл тавих саналд нээлттэй.",
 
     "hm.title": "Энэ хуудсыг гараараа удирдах",
     "hm.body": "Гар таних загвар (MediaPipe) зөвхөн таны хөтөч дотор ажиллана. Камерын дүрс таны төхөөрөмжөөс хаашаа ч гарахгүй.",
@@ -163,7 +162,6 @@ window.I18N = {
 
     "contact.kicker": "06 — Contact",
     "contact.title": "Let’s build interfaces that understand people.",
-    "contact.sub": "Open to research collaboration, student supervision and talks.",
 
     "hm.title": "Control this page with your hand",
     "hm.body": "A hand-tracking model (MediaPipe) runs entirely in your browser. No video ever leaves your device.",
