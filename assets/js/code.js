@@ -91,7 +91,7 @@
         "    const pinched = dist(lm[4], lm[8]) / dist(lm[0], lm[9]) < 0.32;",
         "    const act = pinchStep(pinched, cursor.y);",
         '    if (act === "click") click(cursor);           // two quick pinches',
-        '    if (act === "scroll") scrollBy(0, (lastY - cursor.y) * 2.4);  // hold + move',
+        '    if (act === "scroll") scrollBy(0, (lastY - cursor.y) * 1.5);  // hold + move',
         "    lastY = cursor.y;",
         "  }",
         "  requestAnimationFrame(loop);",
