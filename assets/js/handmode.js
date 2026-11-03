@@ -313,11 +313,27 @@ function click(x, y) {
   if (!el) return;
   const target = el.closest("a, button, input, label, [data-chip]") || el;
   if (target.matches("input")) { target.focus(); return; }
+  if (target.matches("a[href]") && openLink(target)) return;
   // Dispatch pointer events too, so canvases (stage, network) respond like a mouse click.
   const opts = { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerType: "mouse", isPrimary: true };
   target.dispatchEvent(new PointerEvent("pointerdown", opts));
   target.dispatchEvent(new PointerEvent("pointerup", opts));
   target.click();
+}
+
+// A pinch is not a real user gesture, so browsers block what normally needs one:
+// new tabs and mail apps. Handles those links; returns false for ordinary ones.
+function openLink(a) {
+  if (a.protocol === "mailto:") {
+    toast("✉ " + decodeURIComponent(a.href.slice(7)));
+    return true;
+  }
+  if (a.target !== "_blank") return false;
+  const w = window.open(a.href, "_blank");
+  if (w) { w.opener = null; return true; }
+  toast(t("hm.sametab"));
+  setTimeout(() => location.assign(a.href), 700);
+  return true;
 }
 
 function drawOverlay(lm) {

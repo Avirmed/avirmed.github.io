@@ -80,6 +80,7 @@ window.I18N = {
     "hm.error": "Камер эсвэл загварыг эхлүүлж чадсангүй: ",
     "hm.on": "Гараар удирдах горим асав. Гараа камерт харуулна уу ✋",
     "hm.off": "Гараар удирдах горим унтарлаа",
+    "hm.sametab": "Хөтөч шинэ таб хаасан тул энэ таб дээр нээж байна…",
 
     "g.point": "Заах",
     "g.pinch": "Чимхэх",
@@ -177,6 +178,7 @@ window.I18N = {
     "hm.error": "Could not start camera or model: ",
     "hm.on": "Hand mode is on. Show your hand to the camera ✋",
     "hm.off": "Hand mode off",
+    "hm.sametab": "The browser blocked a new tab, opening it here…",
 
     "g.point": "Pointing",
     "g.pinch": "Pinch",
