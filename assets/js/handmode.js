@@ -211,7 +211,7 @@ function knuckleToScreen(p) {
 function smooth(prev, target, dt) {
   if (!prev) return { ...target };
   const speed = Math.hypot(target.x - prev.x, target.y - prev.y) / Math.max(dt, 1e-3);
-  const a30 = 0.12 + Math.min(0.45, speed / 4000);         // per frame at 30 fps
+  const a30 = 0.09 + Math.min(0.33, speed / 5000);         // per frame at 30 fps
   const a = 1 - Math.pow(1 - a30, dt * 30);
   return { x: prev.x + (target.x - prev.x) * a, y: prev.y + (target.y - prev.y) * a };
 }
