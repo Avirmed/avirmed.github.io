@@ -26,9 +26,8 @@ const BONES = [
   [0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
   [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17],
 ];
-const PINCH_DOWN = 0.30;    // 3D thumb–index tip distance / 3D palm length
-const PINCH_UP = 0.42;      // hysteresis: must open this far to release
-const PINCH_FRAMES = 2;     // a pinch state change must hold for this many frames
+const PINCH_DOWN = 0.32;    // thumb–index tip distance / palm length (wrist to middle knuckle)
+const PINCH_UP = 0.46;      // hysteresis: must open this far to release
 const HOLD_MS = 350;        // a pinch held this long starts scrolling; shorter is a tap
 const DOUBLE_MS = 600;      // second pinch must start this soon after the first ends
 const SCROLL_GAIN = 1.9;    // page pixels per pixel of hand travel
@@ -44,8 +43,7 @@ let lastSeen = 0;
 let hovered = null;
 let lastTrigger = null;
 let pinch = { down: false, since: 0, lastY: 0, vel: 0, scrolling: false, lastTap: 0, second: false };
-let pinchRatio = null;      // smoothed, for display
-let pinchVotes = 0;         // consecutive frames disagreeing with the current state
+let pinchRatio = null;      // smoothed, for the cursor display
 let glide = 0;
 let flashUntil = 0;
 
@@ -180,14 +178,16 @@ function gestures(lm, world) {
     ring: extension(lm, 16, 14),
     pinky: extension(lm, 20, 18),
   };
-  // Pinch is measured in 3D (MediaPipe world landmarks, falling back to the
-  // image landmarks' relative depth) so turning or tilting the hand does not
-  // change it. In a fist the thumb rests on the index finger tucked into the
-  // palm; a pinching index fingertip stays well away from its knuckle.
+  // Pinch: the image-plane ratio that works for a hand facing the camera, and
+  // the same ratio in 3D (MediaPipe world landmarks) for a turned or tilted
+  // hand, whose image-plane palm looks shorter. Either one closing counts.
+  // In a fist the thumb rests on the middle of the index finger, so a pinch
+  // also needs the thumb nearer the index fingertip than its PIP joint.
   const w = world || lm;
-  const palm3 = Math.max(dist3(w[0], w[5]), 1e-4);
-  const indexOut = dist3(w[8], w[5]) / palm3 > 0.38;
-  const pinchRatio = indexOut ? dist3(w[4], w[8]) / palm3 : Infinity;
+  const ratio2 = dist(lm[4], lm[8]) / palm;
+  const ratio3 = dist3(w[4], w[8]) / Math.max(dist3(w[0], w[9]), 1e-4);
+  const atTip = dist3(w[4], w[8]) < dist3(w[4], w[6]);
+  const pinchRatio = atTip ? Math.min(ratio2, ratio3) : Infinity;
   const curled = (1 - e.index) * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky);
   // thumbs-up: thumb tip clearly above its own joints and the index knuckle
   const thumbUp = lm[4].y < lm[3].y && lm[3].y < lm[2].y ? clamp(((lm[5].y - lm[4].y) / palm - 0.25) / 0.5, 0, 1) : 0;
@@ -250,18 +250,12 @@ function pinchStep(s, isDown, y, now) {
   return { s, act: null };
 }
 
-// Only change the pinch state once the new reading has held for a couple of
-// frames, so one noisy frame neither starts nor breaks a pinch. The smoothed
-// ratio is kept for the cursor's "how close" display only, to avoid extra lag.
+// Pinch on/off with hysteresis, decided on the raw ratio so quick double
+// pinches are not slowed down. A smoothed copy only drives the cursor display.
 function pinchState(ratio, wasDown) {
   if (!isFinite(ratio)) pinchRatio = null;
   else pinchRatio = pinchRatio == null ? ratio : pinchRatio + (ratio - pinchRatio) * 0.5;
-  const wants = wasDown ? ratio < PINCH_UP : ratio < PINCH_DOWN;
-  if (wants === wasDown) { pinchVotes = 0; return wasDown; }
-  pinchVotes++;
-  if (pinchVotes < PINCH_FRAMES) return wasDown;
-  pinchVotes = 0;
-  return wants;
+  return wasDown ? ratio < PINCH_UP : ratio < PINCH_DOWN;
 }
 
 function onHand(lm, world) {
@@ -314,7 +308,6 @@ function releasePinch() {
   if (pinch.scrolling) glide = pinch.vel;
   pinch = { ...pinch, down: false, scrolling: false, second: false };
   pinchRatio = null;
-  pinchVotes = 0;
   cursor.style.setProperty("--near", "0");
   cursor.classList.remove("pinch", "scroll");
 }
