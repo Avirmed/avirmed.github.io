@@ -635,7 +635,7 @@ html[data-theme="dark"] .sun, html[data-theme="light"] .moon { display: none; }
   border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent);
   box-shadow: 0 0 0 6px var(--glow); transition: transform 0.15s var(--ease), background 0.15s, opacity 0.3s;
 }
-.hand-cursor span::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: var(--accent); }
+.hand-cursor span::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: var(--accent); transform: scale(calc(1 + var(--near, 0) * 3)); transition: transform 0.08s linear; }
 .hand-cursor.pinch span { transform: scale(0.6); background: var(--accent); }
 .hand-cursor.scroll span { transform: scale(0.85, 1.35); border-radius: 14px; background: color-mix(in srgb, var(--accent) 35%, transparent); }
 .hand-cursor.tap span { animation: hc-tap 0.35s var(--ease); }

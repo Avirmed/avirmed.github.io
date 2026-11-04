@@ -26,11 +26,11 @@ const BONES = [
   [0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
   [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17],
 ];
-const PINCH_DOWN = 0.32;    // thumb–index distance / palm size
-const PINCH_UP = 0.46;
-const HOLD_MS = 280;        // a pinch held this long starts scrolling
-const TAP_MAX_MS = 260;     // a pinch released sooner than this is a tap
-const DOUBLE_MS = 500;      // two taps within this window click
+const PINCH_DOWN = 0.30;    // 3D thumb–index tip distance / 3D palm length
+const PINCH_UP = 0.42;      // hysteresis: must open this far to release
+const PINCH_FRAMES = 2;     // a pinch state change must hold for this many frames
+const HOLD_MS = 350;        // a pinch held this long starts scrolling; shorter is a tap
+const DOUBLE_MS = 600;      // second pinch must start this soon after the first ends
 const SCROLL_GAIN = 1.9;    // page pixels per pixel of hand travel
 const GLIDE = 0.9;          // momentum kept per frame after a scroll
 
@@ -43,7 +43,9 @@ let lastFrameT = 0;
 let lastSeen = 0;
 let hovered = null;
 let lastTrigger = null;
-let pinch = { down: false, since: 0, lastY: 0, vel: 0, scrolling: false, lastTap: 0 };
+let pinch = { down: false, since: 0, lastY: 0, vel: 0, scrolling: false, lastTap: 0, second: false };
+let pinchRatio = null;      // smoothed, for display
+let pinchVotes = 0;         // consecutive frames disagreeing with the current state
 let glide = 0;
 let flashUntil = 0;
 
@@ -145,7 +147,7 @@ function loop() {
       // the tracker can hold a "ghost" hand at the border after it has left the frame
       if (lm && outOfFrame(lm[9])) lm = null;
       drawOverlay(lm);
-      if (lm) onHand(lm);
+      if (lm) onHand(lm, res.worldLandmarks && res.worldLandmarks[0]);
       else onNoHand();
     }
     if (glide) {
@@ -161,6 +163,7 @@ function loop() {
 
 const outOfFrame = (p) => p.x < -0.02 || p.x > 1.02 || p.y < -0.02 || p.y > 1.02;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 function extension(lm, tip, pip) {
@@ -168,7 +171,7 @@ function extension(lm, tip, pip) {
   return clamp((dist(lm[0], lm[tip]) / Math.max(dist(lm[0], lm[pip]), 1e-4) - 1) / 0.6, 0, 1);
 }
 
-function gestures(lm) {
+function gestures(lm, world) {
   const palm = Math.max(dist(lm[0], lm[9]), 1e-4);
   const e = {
     thumb: clamp((dist(lm[4], lm[17]) / Math.max(dist(lm[3], lm[17]), 1e-4) - 1) / 0.4, 0, 1),
@@ -177,10 +180,14 @@ function gestures(lm) {
     ring: extension(lm, 16, 14),
     pinky: extension(lm, 20, 18),
   };
-  // In a fist the thumb rests on the curled index finger, which would read as a
-  // pinch; a real pinch keeps the index fingertip out beyond its PIP joint.
-  const indexOut = dist(lm[0], lm[8]) > dist(lm[0], lm[6]) * 0.95;
-  const pinchRatio = indexOut ? dist(lm[4], lm[8]) / palm : Infinity;
+  // Pinch is measured in 3D (MediaPipe world landmarks, falling back to the
+  // image landmarks' relative depth) so turning or tilting the hand does not
+  // change it. In a fist the thumb rests on the index finger tucked into the
+  // palm; a pinching index fingertip stays well away from its knuckle.
+  const w = world || lm;
+  const palm3 = Math.max(dist3(w[0], w[5]), 1e-4);
+  const indexOut = dist3(w[8], w[5]) / palm3 > 0.38;
+  const pinchRatio = indexOut ? dist3(w[4], w[8]) / palm3 : Infinity;
   const curled = (1 - e.index) * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky);
   // thumbs-up: thumb tip clearly above its own joints and the index knuckle
   const thumbUp = lm[4].y < lm[3].y && lm[3].y < lm[2].y ? clamp(((lm[5].y - lm[4].y) / palm - 0.25) / 0.5, 0, 1) : 0;
@@ -191,7 +198,7 @@ function gestures(lm) {
     open: Math.pow((e.thumb + e.index + e.middle + e.ring + e.pinky) / 5, 2),
     like: curled * thumbUp,
     fist: curled * (1 - thumbUp),
-    pinch: clamp((0.5 - pinchRatio) / 0.3, 0, 1),
+    pinch: clamp((0.55 - pinchRatio) / 0.3, 0, 1),
   };
   const sum = Object.values(raw).reduce((a, b) => a + b, 0) + 0.05;
   const scores = {};
@@ -219,9 +226,12 @@ function smooth(prev, target, dt) {
 }
 
 // Pinch input as a small state machine. Returns the new state and what happened.
+// A pinch released before HOLD_MS is a tap; a second tap starting within
+// DOUBLE_MS of the first one's release is a click; holding longer scrolls.
 function pinchStep(s, isDown, y, now) {
   if (isDown && !s.down) {
-    return { s: { ...s, down: true, since: now, lastY: y, vel: 0, scrolling: false }, act: "press" };
+    const second = !!s.lastTap && now - s.lastTap <= DOUBLE_MS;
+    return { s: { ...s, down: true, since: now, lastY: y, vel: 0, scrolling: false, second, lastTap: 0 }, act: "press" };
   }
   if (isDown && s.down) {
     if (!s.scrolling) {
@@ -232,16 +242,29 @@ function pinchStep(s, isDown, y, now) {
     return { s: { ...s, lastY: y, vel: s.vel * 0.6 + dy * 0.4 }, act: "scroll", amount: dy };
   }
   if (!isDown && s.down) {
-    const up = { ...s, down: false, scrolling: false };
-    if (s.scrolling) return { s: { ...up, lastTap: 0 }, act: "scroll-end", amount: s.vel };
-    if (now - s.since > TAP_MAX_MS) return { s: { ...up, lastTap: 0 }, act: null };
-    if (s.lastTap && now - s.lastTap <= DOUBLE_MS) return { s: { ...up, lastTap: 0 }, act: "click" };
+    const up = { ...s, down: false, scrolling: false, second: false };
+    if (s.scrolling) return { s: up, act: "scroll-end", amount: s.vel };
+    if (s.second) return { s: up, act: "click" };
     return { s: { ...up, lastTap: now }, act: "tap" };
   }
   return { s, act: null };
 }
 
-function onHand(lm) {
+// Only change the pinch state once the new reading has held for a couple of
+// frames, so one noisy frame neither starts nor breaks a pinch. The smoothed
+// ratio is kept for the cursor's "how close" display only, to avoid extra lag.
+function pinchState(ratio, wasDown) {
+  if (!isFinite(ratio)) pinchRatio = null;
+  else pinchRatio = pinchRatio == null ? ratio : pinchRatio + (ratio - pinchRatio) * 0.5;
+  const wants = wasDown ? ratio < PINCH_UP : ratio < PINCH_DOWN;
+  if (wants === wasDown) { pinchVotes = 0; return wasDown; }
+  pinchVotes++;
+  if (pinchVotes < PINCH_FRAMES) return wasDown;
+  pinchVotes = 0;
+  return wants;
+}
+
+function onHand(lm, world) {
   const now = performance.now();
   const dt = Math.min(0.1, (now - (lastFrameT || now)) / 1000) || 1 / 30;
   lastFrameT = now;
@@ -251,11 +274,13 @@ function onHand(lm) {
   pos = smooth(pos, knuckleToScreen(lm[5]), dt);
   cursor.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
 
-  const g = gestures(lm);
+  const g = gestures(lm, world);
   dispatchEvent(new CustomEvent("handframe", { detail: { pts: lm.map((p) => ({ x: p.x, y: p.y })), scores: g.scores } }));
 
-  // pinch with hysteresis
-  const isDown = pinch.down ? g.pinchRatio < PINCH_UP : g.pinchRatio < PINCH_DOWN;
+  const isDown = pinchState(g.pinchRatio, pinch.down);
+  // the cursor dot grows as the fingers close, so the visitor sees how near a pinch is
+  const near = pinchRatio == null ? 0 : clamp((0.6 - pinchRatio) / (0.6 - PINCH_DOWN), 0, 1);
+  cursor.style.setProperty("--near", near.toFixed(2));
   const r = pinchStep(pinch, isDown, pos.y, now);
   pinch = r.s;
   if (r.act === "press") { glide = 0; cursor.classList.add("pinch"); }
@@ -287,7 +312,10 @@ function flash(cls, label, now) {
 
 function releasePinch() {
   if (pinch.scrolling) glide = pinch.vel;
-  pinch = { ...pinch, down: false, scrolling: false };
+  pinch = { ...pinch, down: false, scrolling: false, second: false };
+  pinchRatio = null;
+  pinchVotes = 0;
+  cursor.style.setProperty("--near", "0");
   cursor.classList.remove("pinch", "scroll");
 }
 
