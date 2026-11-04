@@ -98,7 +98,7 @@ window.I18N = {
 
   en: {
     skip: "Skip to content",
-    brand: "Avirmed E.",
+    brand: "Avirmed Enkhbat",
     "nav.about": "About",
     "nav.research": "Research",
     "nav.pubs": "Publications",
