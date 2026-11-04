@@ -32,6 +32,9 @@ const HOLD_MS = 350;        // a pinch held this long starts scrolling; shorter 
 const DOUBLE_MS = 600;      // second pinch must start this soon after the first ends
 const SCROLL_GAIN = 1.9;    // page pixels per pixel of hand travel
 const GLIDE = 0.9;          // momentum kept per frame after a scroll
+const EURO_MIN_CUTOFF = 0.15;  // Hz; lower holds a resting hand steadier
+const EURO_BETA = 0.002;       // how quickly the filter opens up with hand speed (px/s)
+const EURO_D_CUTOFF = 0.3;     // Hz; smoothing of the speed estimate itself
 
 let landmarker = null;
 let stream = null;
@@ -212,14 +215,17 @@ function knuckleToScreen(p) {
   };
 }
 
-// Exponential moving average that follows faster when the hand moves faster:
-// a resting hand is held steady, a quick move is not left lagging behind.
+// One Euro filter (Casiez et al., 2012): heavy smoothing while the hand rests,
+// opening up as it moves. Its speed estimate is itself smoothed, so landmark
+// jitter is not mistaken for movement.
+const lowpass = (cutoff, dt) => 1 / (1 + 1 / (2 * Math.PI * cutoff) / dt);
 function smooth(prev, target, dt) {
-  if (!prev) return { ...target };
-  const speed = Math.hypot(target.x - prev.x, target.y - prev.y) / Math.max(dt, 1e-3);
-  const a30 = 0.09 + Math.min(0.33, speed / 5000);         // per frame at 30 fps
-  const a = 1 - Math.pow(1 - a30, dt * 30);
-  return { x: prev.x + (target.x - prev.x) * a, y: prev.y + (target.y - prev.y) * a };
+  if (!prev) return { x: target.x, y: target.y, dx: 0, dy: 0 };
+  const ad = lowpass(EURO_D_CUTOFF, dt);
+  const dx = (prev.dx || 0) + ((target.x - prev.x) / dt - (prev.dx || 0)) * ad;
+  const dy = (prev.dy || 0) + ((target.y - prev.y) / dt - (prev.dy || 0)) * ad;
+  const a = lowpass(EURO_MIN_CUTOFF + EURO_BETA * Math.hypot(dx, dy), dt);
+  return { x: prev.x + (target.x - prev.x) * a, y: prev.y + (target.y - prev.y) * a, dx, dy };
 }
 
 // Pinch input as a small state machine. Returns the new state and what happened.
@@ -261,7 +267,9 @@ function onHand(lm) {
   lastSeen = now;
   cursor.classList.remove("lost");
 
-  pos = smooth(pos, knuckleToScreen(lm[5]), dt);
+  // index and middle knuckles both stay put while pinching; their average is
+  // steadier than either one alone
+  pos = smooth(pos, knuckleToScreen({ x: (lm[5].x + lm[9].x) / 2, y: (lm[5].y + lm[9].y) / 2 }), dt);
   cursor.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
 
   const g = gestures(lm);
