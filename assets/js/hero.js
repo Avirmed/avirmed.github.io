@@ -388,9 +388,10 @@
   }
 
   function updatePanelHand(scores) {
-    var rows = Object.keys(scores).map(function (k) { return [t("g." + k), scores[k]]; });
-    rows.sort(function (x, y) { return y[1] - x[1]; });
-    panelRows(rows.slice(0, 3));
+    var keys = Object.keys(scores).sort(function (x, y) { return scores[y] - scores[x]; });
+    // the middle-finger label is shown only when it is the recognised gesture
+    keys = keys.filter(function (k, i) { return k !== "middle" || i === 0; });
+    panelRows(keys.slice(0, 3).map(function (k) { return [t("g." + k), scores[k]]; }));
   }
 
   function setModeLabels(live) {

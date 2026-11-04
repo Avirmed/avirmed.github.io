@@ -46,6 +46,7 @@ let pinch = { down: false, since: 0, lastY: 0, vel: 0, scrolling: false, lastTap
 let pinchDist = null;       // smoothed, for the cursor display
 let glide = 0;
 let flashUntil = 0;
+let shownLabel = { key: null, cand: null, frames: 0 };  // gesture label shown in the camera box
 
 // ------------------------------------------------------------------ UI wiring
 document.querySelectorAll("[data-hand-toggle]").forEach((b) =>
@@ -180,12 +181,17 @@ function gestures(lm) {
   // pinch = thumb tip and index tip touching
   const pinchDist = dist(lm[4], lm[8]);
   const curled = (1 - e.index) * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky);
+  // Middle finger only when it is clearly the one raised: fully out, the other
+  // three folded, and its tip standing well above its neighbours'. A relaxed,
+  // half-open hand (where the middle finger is naturally the longest) is not it.
+  const middleUp = e.middle > 0.4 && e.index < 0.2 && e.ring < 0.2 && e.pinky < 0.2 &&
+    dist(lm[0], lm[12]) > 1.25 * Math.max(dist(lm[0], lm[8]), dist(lm[0], lm[16]));
   // thumbs-up: thumb tip clearly above its own joints and the index knuckle
   const thumbUp = lm[4].y < lm[3].y && lm[3].y < lm[2].y ? clamp(((lm[5].y - lm[4].y) / palm - 0.25) / 0.5, 0, 1) : 0;
   const raw = {
     point: e.index * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky),
     victory: e.index * e.middle * (1 - e.ring) * (1 - e.pinky),
-    middle: e.middle * (1 - e.index) * (1 - e.ring) * (1 - e.pinky),
+    middle: middleUp ? e.middle : 0,
     open: Math.pow((e.thumb + e.index + e.middle + e.ring + e.pinky) / 5, 2),
     like: curled * thumbUp,
     fist: curled * (1 - thumbUp),
@@ -280,12 +286,22 @@ function onHand(lm) {
   if (pinch.scrolling) gestureEl.textContent = "Scroll ↕";
   else if (now > flashUntil) {
     const top = Object.entries(g.scores).sort((a, b) => b[1] - a[1])[0][0];
-    gestureEl.textContent = t("g." + top);
+    gestureEl.textContent = t("g." + stableLabel(top));
   }
 
   // hover target
   const el = document.elementFromPoint(pos.x, pos.y);
   setHover(el ? el.closest("a, button, input, [data-tilt], .pub") : null);
+}
+
+// A new gesture label must win a few frames in a row before it is shown, so
+// passing poses do not flash up; the middle finger needs a little longer.
+function stableLabel(top) {
+  if (top === shownLabel.key) { shownLabel.cand = null; return top; }
+  if (top !== shownLabel.cand) { shownLabel.cand = top; shownLabel.frames = 0; }
+  shownLabel.frames++;
+  if (shownLabel.frames >= (top === "middle" ? 5 : 2) || shownLabel.key == null) { shownLabel.key = top; shownLabel.cand = null; }
+  return shownLabel.key;
 }
 
 function flash(cls, label, now) {
