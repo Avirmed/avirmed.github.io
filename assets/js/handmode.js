@@ -182,18 +182,14 @@ function gestures(lm) {
     pinky: extension(lm, 20, 18),
   };
   const curled = (1 - e.index) * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky);
-  // Finger heart: middle, ring and pinky folded, and the thumb crossed over the
-  // index finger: its base and its tip lie on opposite sides of the index line,
-  // with the two tips meeting up top. A pinch brings the tips together without
-  // crossing, which is how the two are told apart.
-  const side = (a, b, p) => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
-  const indexLen = Math.max(dist(lm[5], lm[8]), 1e-4);
-  const baseSide = side(lm[5], lm[8], lm[2]), tipSide = side(lm[5], lm[8], lm[4]);
-  const crossed = Math.sign(baseSide) !== Math.sign(tipSide) && Math.abs(tipSide) / (indexLen * palm) > 0.05;
-  const tipsMeet = Math.min(dist(lm[4], lm[7]), dist(lm[4], lm[8])) / palm < 0.35;
-  const heart = crossed && tipsMeet && lm[4].y < lm[5].y && e.middle < 0.25 && e.ring < 0.25 && e.pinky < 0.25 ? 1 : 0;
-  // pinch = thumb tip and index tip touching (never while making a heart)
-  const pinchDist = heart ? Infinity : dist(lm[4], lm[8]);
+  // Finger heart: a fist with the thumb and index fingertips on top of it,
+  // close together and above the knuckles of the folded fingers. It is a label
+  // only; pinching keeps working, since a single pinch does nothing on its own.
+  const knuckleTop = Math.min(lm[9].y, lm[13].y, lm[17].y);
+  const heart = e.middle < 0.25 && e.ring < 0.25 && e.pinky < 0.25 && e.index < 0.5 &&
+    lm[4].y < knuckleTop && lm[8].y < knuckleTop && dist(lm[4], lm[8]) / palm < 0.35 ? 1 : 0;
+  // pinch = thumb tip and index tip touching
+  const pinchDist = dist(lm[4], lm[8]);
   // Middle finger only when it is clearly the one raised: fully out, the other
   // three folded, and its tip standing well above its neighbours'. A relaxed,
   // half-open hand (where the middle finger is naturally the longest) is not it.
