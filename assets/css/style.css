@@ -613,7 +613,8 @@ html[data-theme="dark"] .sun, html[data-theme="light"] .moon { display: none; }
 .hand-modal-card p { color: var(--ink-2); font-size: 15px; }
 .gesture-list { list-style: none; padding: 0; margin: 18px 0; display: grid; gap: 10px; }
 .gesture-list li { display: flex; gap: 12px; align-items: center; font-size: 14.5px; }
-.gesture-list .g { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--bg-2); font-size: 17px; }
+.gesture-list .g { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--bg-2); color: var(--ink); }
+.gesture-list .g svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .hm-status { font: 400 13px var(--f-mono); color: var(--accent); min-height: 1.3em; }
 .hm-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 
