@@ -183,11 +183,16 @@ function gestures(lm) {
   };
   const curled = (1 - e.index) * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky);
   // Finger heart: a fist with the thumb and index fingertips on top of it,
-  // close together and above the knuckles of the folded fingers. It is a label
-  // only; pinching keeps working, since a single pinch does nothing on its own.
+  // close together and above the knuckles of the folded fingers. The index may
+  // be fairly straight; what separates it from pointing is the thumb tip meeting
+  // the index tip. It is a label only; pinching keeps working, since a single
+  // pinch does nothing on its own.
   const knuckleTop = Math.min(lm[9].y, lm[13].y, lm[17].y);
-  const heart = e.middle < 0.25 && e.ring < 0.25 && e.pinky < 0.25 && e.index < 0.5 &&
-    lm[4].y < knuckleTop && lm[8].y < knuckleTop && dist(lm[4], lm[8]) / palm < 0.35 ? 1 : 0;
+  const tipsApart = dist(lm[4], lm[8]) / palm;
+  const heart = e.middle < 0.25 && e.ring < 0.25 && e.pinky < 0.25 &&
+    lm[4].y < knuckleTop && lm[8].y < knuckleTop && tipsApart < 0.4 ? 1 : 0;
+  // pointing keeps the thumb tucked away from the index tip
+  const thumbAway = clamp((tipsApart - 0.3) / 0.25, 0, 1);
   // pinch = thumb tip and index tip touching
   const pinchDist = dist(lm[4], lm[8]);
   // Middle finger only when it is clearly the one raised: fully out, the other
@@ -198,7 +203,7 @@ function gestures(lm) {
   // thumbs-up: thumb tip clearly above its own joints and the index knuckle
   const thumbUp = lm[4].y < lm[3].y && lm[3].y < lm[2].y ? clamp(((lm[5].y - lm[4].y) / palm - 0.25) / 0.5, 0, 1) : 0;
   const raw = {
-    point: e.index * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky),
+    point: e.index * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky) * thumbAway * (1 - heart),
     victory: e.index * e.middle * (1 - e.ring) * (1 - e.pinky),
     middle: middleUp ? e.middle : 0,
     open: Math.pow((e.thumb + e.index + e.middle + e.ring + e.pinky) / 5, 2),
