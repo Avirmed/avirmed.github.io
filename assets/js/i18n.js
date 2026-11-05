@@ -86,6 +86,7 @@ window.I18N = {
     "g.fist": "Нударга",
     "g.like": "Лайк 👍",
     "g.middle": "...😅",
+    "g.heart": "Зүрх 🫰",
     "g.victory": "Ялалт ✌",
     "g.none": "Гар алга",
 
@@ -182,6 +183,7 @@ window.I18N = {
     "g.fist": "Fist",
     "g.like": "Like 👍",
     "g.middle": "...😅",
+    "g.heart": "Finger heart 🫰",
     "g.victory": "Victory ✌",
     "g.none": "No hand",
 

@@ -26,8 +26,8 @@ const BONES = [
   [0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
   [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17],
 ];
-const PINCH_DOWN = 0.05;    // thumb–index tip distance in the camera frame (0–1)
-const PINCH_UP = 0.06;      // released as soon as the tips are this far apart
+const PINCH_DOWN = 0.04;    // thumb–index tip distance in the camera frame (0–1)
+const PINCH_UP = 0.05;      // released as soon as the tips are this far apart
 const HOLD_MS = 350;        // a pinch held this long starts scrolling; shorter is a tap
 const DOUBLE_MS = 600;      // second pinch must start this soon after the first ends
 const SCROLL_GAIN = 1.9;    // page pixels per pixel of hand travel
@@ -181,9 +181,19 @@ function gestures(lm) {
     ring: extension(lm, 16, 14),
     pinky: extension(lm, 20, 18),
   };
-  // pinch = thumb tip and index tip touching
-  const pinchDist = dist(lm[4], lm[8]);
   const curled = (1 - e.index) * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky);
+  // Finger heart: middle, ring and pinky folded, and the thumb crossed over the
+  // index finger: its base and its tip lie on opposite sides of the index line,
+  // with the two tips meeting up top. A pinch brings the tips together without
+  // crossing, which is how the two are told apart.
+  const side = (a, b, p) => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+  const indexLen = Math.max(dist(lm[5], lm[8]), 1e-4);
+  const baseSide = side(lm[5], lm[8], lm[2]), tipSide = side(lm[5], lm[8], lm[4]);
+  const crossed = Math.sign(baseSide) !== Math.sign(tipSide) && Math.abs(tipSide) / (indexLen * palm) > 0.05;
+  const tipsMeet = Math.min(dist(lm[4], lm[7]), dist(lm[4], lm[8])) / palm < 0.35;
+  const heart = crossed && tipsMeet && lm[4].y < lm[5].y && e.middle < 0.25 && e.ring < 0.25 && e.pinky < 0.25 ? 1 : 0;
+  // pinch = thumb tip and index tip touching (never while making a heart)
+  const pinchDist = heart ? Infinity : dist(lm[4], lm[8]);
   // Middle finger only when it is clearly the one raised: fully out, the other
   // three folded, and its tip standing well above its neighbours'. A relaxed,
   // half-open hand (where the middle finger is naturally the longest) is not it.
@@ -196,9 +206,10 @@ function gestures(lm) {
     victory: e.index * e.middle * (1 - e.ring) * (1 - e.pinky),
     middle: middleUp ? e.middle : 0,
     open: Math.pow((e.thumb + e.index + e.middle + e.ring + e.pinky) / 5, 2),
-    like: curled * thumbUp,
-    fist: curled * (1 - thumbUp),
-    pinch: clamp((0.09 - pinchDist) / 0.04, 0, 1),
+    like: curled * thumbUp * (1 - heart),
+    fist: curled * (1 - thumbUp) * (1 - heart),
+    heart: heart * 2,
+    pinch: clamp((0.08 - pinchDist) / 0.04, 0, 1),
   };
   const sum = Object.values(raw).reduce((a, b) => a + b, 0) + 0.05;
   const scores = {};
@@ -256,6 +267,7 @@ function pinchStep(s, isDown, y, now) {
 // Pinch on/off with a little hysteresis so the boundary does not flicker.
 // A smoothed copy of the distance only drives the cursor display.
 function pinchState(d, wasDown) {
+  if (!isFinite(d)) { pinchDist = null; return false; }
   pinchDist = pinchDist == null ? d : pinchDist + (d - pinchDist) * 0.5;
   return wasDown ? d < PINCH_UP : d < PINCH_DOWN;
 }
@@ -277,7 +289,7 @@ function onHand(lm) {
 
   const isDown = pinchState(g.pinchDist, pinch.down);
   // the cursor dot grows as the fingers close, so the visitor sees how near a pinch is
-  cursor.style.setProperty("--near", clamp((0.12 - pinchDist) / (0.12 - PINCH_DOWN), 0, 1).toFixed(2));
+  cursor.style.setProperty("--near", pinchDist == null ? "0" : clamp((0.1 - pinchDist) / (0.1 - PINCH_DOWN), 0, 1).toFixed(2));
   // Scroll follows the hand in the camera frame, not the cursor: the cursor
   // stops at the screen edge, the hand can keep moving.
   const handY = lm[5].y * 2 * innerHeight;
@@ -308,7 +320,7 @@ function stableLabel(top) {
   if (top === shownLabel.key) { shownLabel.cand = null; return top; }
   if (top !== shownLabel.cand) { shownLabel.cand = top; shownLabel.frames = 0; }
   shownLabel.frames++;
-  if (shownLabel.frames >= (top === "middle" ? 5 : 2) || shownLabel.key == null) { shownLabel.key = top; shownLabel.cand = null; }
+  if (shownLabel.frames >= (top === "middle" ? 5 : top === "heart" ? 3 : 2) || shownLabel.key == null) { shownLabel.key = top; shownLabel.cand = null; }
   return shownLabel.key;
 }
 
