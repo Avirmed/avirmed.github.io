@@ -182,23 +182,20 @@ function gestures(lm) {
     pinky: extension(lm, 20, 18),
   };
   const curled = (1 - e.index) * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky);
-  // Finger heart: thumb and index fingertips together on top, above every
-  // knuckle, while the middle, ring and pinky tips are folded into the centre
-  // of the palm. Pinch is the same two tips meeting with those fingers not
-  // folded in, so a heart never counts as a pinch.
-  const centre = {
-    x: (lm[0].x + lm[5].x + lm[9].x + lm[13].x + lm[17].x) / 5,
-    y: (lm[0].y + lm[5].y + lm[9].y + lm[13].y + lm[17].y) / 5,
-  };
-  const inCentre = (i) => dist(lm[i], centre) / palm < 0.55;
-  const knuckleTop = Math.min(lm[5].y, lm[9].y, lm[13].y, lm[17].y);
+  // Finger heart (thumb crossed over a bent index finger, the two tips apart
+  // in a V on top of a fist): the thumb and index lines meet part-way along,
+  // not at the tips; the tips stay apart, so it can never be a pinch; the
+  // thumb tip rises above the index PIP joint (a pointing thumb is tucked
+  // below it); and the middle, ring and pinky are folded.
   const tipsApart = dist(lm[4], lm[8]) / palm;
-  const heart = inCentre(12) && inCentre(16) && inCentre(20) &&
-    lm[4].y < knuckleTop && lm[8].y < knuckleTop && tipsApart < 0.4 ? 1 : 0;
+  const cross = segmentContact(lm[5], lm[8], lm[2], lm[4]);
+  const crossed = cross.d / palm < 0.15 && cross.t > 0.1 && cross.t < 0.9 && cross.u > 0.2 && cross.u < 0.95;
+  const heart = crossed && tipsApart > 0.15 && lm[4].y < lm[6].y &&
+    e.middle < 0.3 && e.ring < 0.3 && e.pinky < 0.3 ? 1 : 0;
   // pointing keeps the thumb tucked away from the index tip
   const thumbAway = clamp((tipsApart - 0.3) / 0.25, 0, 1);
-  // pinch = thumb tip and index tip touching, other fingers not folded in
-  const pinchDist = heart ? Infinity : dist(lm[4], lm[8]);
+  // pinch = thumb tip and index tip touching
+  const pinchDist = dist(lm[4], lm[8]);
   // Middle finger only when it is clearly the one raised: fully out, the other
   // three folded, and its tip standing well above its neighbours'. A relaxed,
   // half-open hand (where the middle finger is naturally the longest) is not it.
@@ -220,6 +217,21 @@ function gestures(lm) {
   const scores = {};
   for (const k in raw) scores[k] = raw[k] / sum;
   return { pinchDist, scores };
+}
+
+// Closest approach of segments p1-p2 and q1-q2 in the image plane: the gap d,
+// and where it happens along each (t on p, u on q, 0 = start, 1 = end).
+function segmentContact(p1, p2, q1, q2) {
+  const dx = p2.x - p1.x, dy = p2.y - p1.y, ex = q2.x - q1.x, ey = q2.y - q1.y;
+  const rx = p1.x - q1.x, ry = p1.y - q1.y;
+  const a = dx * dx + dy * dy, e = ex * ex + ey * ey, f = ex * rx + ey * ry;
+  const c = dx * rx + dy * ry, b = dx * ex + dy * ey, den = a * e - b * b;
+  let t = den > 1e-12 ? clamp((b * f - c * e) / den, 0, 1) : 0;
+  let u = (b * t + f) / Math.max(e, 1e-12);
+  if (u < 0) { u = 0; t = clamp(-c / Math.max(a, 1e-12), 0, 1); }
+  else if (u > 1) { u = 1; t = clamp((b - c) / Math.max(a, 1e-12), 0, 1); }
+  const d = Math.hypot(p1.x + dx * t - (q1.x + ex * u), p1.y + dy * t - (q1.y + ey * u));
+  return { d, t, u };
 }
 
 // Map the index knuckle to the screen: the central 0.3–0.8 of the camera frame
