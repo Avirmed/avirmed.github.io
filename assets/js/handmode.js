@@ -182,19 +182,23 @@ function gestures(lm) {
     pinky: extension(lm, 20, 18),
   };
   const curled = (1 - e.index) * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky);
-  // Finger heart: a fist with the thumb and index fingertips on top of it,
-  // close together and above the knuckles of the folded fingers. The index may
-  // be fairly straight; what separates it from pointing is the thumb tip meeting
-  // the index tip. It is a label only; pinching keeps working, since a single
-  // pinch does nothing on its own.
-  const knuckleTop = Math.min(lm[9].y, lm[13].y, lm[17].y);
+  // Finger heart: thumb and index fingertips together on top, above every
+  // knuckle, while the middle, ring and pinky tips are folded into the centre
+  // of the palm. Pinch is the same two tips meeting with those fingers not
+  // folded in, so a heart never counts as a pinch.
+  const centre = {
+    x: (lm[0].x + lm[5].x + lm[9].x + lm[13].x + lm[17].x) / 5,
+    y: (lm[0].y + lm[5].y + lm[9].y + lm[13].y + lm[17].y) / 5,
+  };
+  const inCentre = (i) => dist(lm[i], centre) / palm < 0.55;
+  const knuckleTop = Math.min(lm[5].y, lm[9].y, lm[13].y, lm[17].y);
   const tipsApart = dist(lm[4], lm[8]) / palm;
-  const heart = e.middle < 0.25 && e.ring < 0.25 && e.pinky < 0.25 &&
+  const heart = inCentre(12) && inCentre(16) && inCentre(20) &&
     lm[4].y < knuckleTop && lm[8].y < knuckleTop && tipsApart < 0.4 ? 1 : 0;
   // pointing keeps the thumb tucked away from the index tip
   const thumbAway = clamp((tipsApart - 0.3) / 0.25, 0, 1);
-  // pinch = thumb tip and index tip touching
-  const pinchDist = dist(lm[4], lm[8]);
+  // pinch = thumb tip and index tip touching, other fingers not folded in
+  const pinchDist = heart ? Infinity : dist(lm[4], lm[8]);
   // Middle finger only when it is clearly the one raised: fully out, the other
   // three folded, and its tip standing well above its neighbours'. A relaxed,
   // half-open hand (where the middle finger is naturally the longest) is not it.
