@@ -1,6 +1,6 @@
 # avirmed.github.io
 
-Personal academic site of Dr. Avirmed Enkhbat (Э. Авирмэд), Associate Professor at the National University of Mongolia.
+Personal academic site of PhD Avirmed Enkhbat (Э. Авирмэд), Associate Professor at the National University of Mongolia.
 
 Plain HTML/CSS/JS with no build step, so GitHub Pages serves it as is.
 
