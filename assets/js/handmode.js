@@ -49,6 +49,7 @@ let pinch = { down: false, since: 0, lastY: 0, vel: 0, scrolling: false, lastTap
 let pinchDist = null;       // smoothed, for the cursor display
 let glide = 0;
 let flashUntil = 0;
+let videoAspect = 4 / 3;    // camera frame width / height
 let shownLabel = { key: null, cand: null, frames: 0 };  // gesture label shown in the camera box
 
 // ------------------------------------------------------------------ UI wiring
@@ -108,6 +109,7 @@ async function start() {
     cursor.hidden = false;
     root.classList.add("hand-on");
     running = true;
+    videoAspect = (video.videoWidth || 640) / (video.videoHeight || 480);
     overlay.width = video.videoWidth || 640;
     overlay.height = video.videoHeight || 480;
     toast(t("hm.on"));
@@ -167,71 +169,78 @@ const outOfFrame = (p) => p.x < -0.02 || p.x > 1.02 || p.y < -0.02 || p.y > 1.02
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-function extension(lm, tip, pip) {
-  // >0 when the fingertip is farther from the wrist than its PIP joint
-  return clamp((dist(lm[0], lm[tip]) / Math.max(dist(lm[0], lm[pip]), 1e-4) - 1) / 0.6, 0, 1);
+// How straight a finger is, from how far its tip is from the wrist compared
+// with its PIP joint. On real hands that ratio is about 0.66 for a curled
+// finger and 1.37 for a straight one, so 0.85 maps to 0 and 1.2 to 1.
+function extension(P, tip, pip) {
+  return clamp((dist(P[0], P[tip]) / Math.max(dist(P[0], P[pip]), 1e-4) - 0.85) / 0.35, 0, 1);
 }
 
-function gestures(lm) {
-  const palm = Math.max(dist(lm[0], lm[9]), 1e-4);
+// Pinch is the plain distance between the thumb and index fingertips in the
+// camera frame; clicking and scrolling depend on this number alone.
+const pinchDistance = (lm) => dist(lm[4], lm[8]);
+
+// Scores for the gesture label. Everything is measured relative to the hand's
+// own size and axis, so the result does not depend on how far the hand is from
+// the camera or how it is turned in the image. The thresholds come from
+// landmarks MediaPipe finds on photographs of real hands.
+function gestures(lm, pinched) {
+  // the video's x and y are normalised separately; make the plane isotropic
+  const P = lm.map((p) => ({ x: p.x * videoAspect, y: p.y }));
+  // hand size: palm length, or palm width when the palm is tipped toward the camera
+  const size = Math.max(dist(P[0], P[9]), 1.15 * dist(P[5], P[17]), 1e-4);
+  // height of a point above the wrist along the hand's axis (knuckles sit near 1)
+  const ax = P[9].x - P[0].x, ay = P[9].y - P[0].y, al = Math.max(Math.hypot(ax, ay), 1e-4);
+  const height = (i) => ((P[i].x - P[0].x) * ax + (P[i].y - P[0].y) * ay) / (al * size);
+
   const e = {
-    thumb: clamp((dist(lm[4], lm[17]) / Math.max(dist(lm[3], lm[17]), 1e-4) - 1) / 0.4, 0, 1),
-    index: extension(lm, 8, 6),
-    middle: extension(lm, 12, 10),
-    ring: extension(lm, 16, 14),
-    pinky: extension(lm, 20, 18),
+    index: extension(P, 8, 6),
+    middle: extension(P, 12, 10),
+    ring: extension(P, 16, 14),
+    pinky: extension(P, 20, 18),
   };
-  const curled = (1 - e.index) * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky);
-  // Finger heart (thumb crossed over a bent index finger, the two tips apart
-  // in a V on top of a fist): the thumb and index lines meet part-way along,
-  // not at the tips; the tips stay apart, so it can never be a pinch; the
-  // thumb tip rises above the index PIP joint (a pointing thumb is tucked
-  // below it); and the middle, ring and pinky are folded.
-  const tipsApart = dist(lm[4], lm[8]) / palm;
-  const cross = segmentContact(lm[5], lm[8], lm[2], lm[4]);
-  const crossed = cross.d / palm < 0.15 && cross.t > 0.1 && cross.t < 0.9 && cross.u > 0.2 && cross.u < 0.95;
-  const heart = crossed && tipsApart > 0.15 && lm[4].y < lm[6].y &&
-    e.middle < 0.3 && e.ring < 0.3 && e.pinky < 0.3 ? 1 : 0;
-  // pointing keeps the thumb tucked away from the index tip
-  const thumbAway = clamp((tipsApart - 0.3) / 0.25, 0, 1);
-  // pinch = thumb tip and index tip touching
-  const pinchDist = dist(lm[4], lm[8]);
-  // Middle finger only when it is clearly the one raised: fully out, the other
-  // three folded, and its tip standing well above its neighbours'. A relaxed,
+  const folded = (1 - e.middle) * (1 - e.ring) * (1 - e.pinky);
+  const tips = dist(P[4], P[8]) / size;                                              // thumb tip to index tip
+  const gap = Math.min(dist(P[4], P[6]), dist(P[4], P[7]), dist(P[4], P[8])) / size;  // thumb tip to the index finger
+
+  // Finger heart: the thumb tip rides on top of the hand, right against the
+  // index finger, with the two tips not quite touching, and the other three
+  // fingers folded (in real hearts they are often only loosely folded, and the
+  // index is half straight). What sets it apart is the thumb: a fist keeps it
+  // down at knuckle height, pointing tucks it away, a thumbs-up holds it out.
+  const loose = (v) => 1 - clamp((v - 0.4) / 0.6, 0, 1);
+  const heart = loose(e.middle) * loose(e.ring) * loose(e.pinky) *
+    clamp((height(4) - 1.1) / 0.2, 0, 1) * clamp((0.75 - gap) / 0.2, 0, 1) * clamp((tips - 0.08) / 0.1, 0, 1);
+  // Thumbs-up / thumbs-down: fingers folded and the thumb held out, away from
+  // the index finger; which one depends on where the thumb points in the image.
+  const tx = P[4].x - P[2].x, ty = P[4].y - P[2].y, up = -ty / Math.max(Math.hypot(tx, ty), 1e-4);
+  const thumbOut = (1 - e.index) * folded * clamp((gap - 0.55) / 0.2, 0, 1);
+  const like = thumbOut * clamp((up + 0.2) / 0.4, 0, 1);
+  const dislike = thumbOut * clamp((-up - 0.2) / 0.4, 0, 1);
+  // Middle finger only when it is clearly the one raised: straight, the other
+  // three bent, and its tip standing well above its neighbours'. A relaxed,
   // half-open hand (where the middle finger is naturally the longest) is not it.
-  const middleUp = e.middle > 0.4 && e.index < 0.2 && e.ring < 0.2 && e.pinky < 0.2 &&
-    dist(lm[0], lm[12]) > 1.25 * Math.max(dist(lm[0], lm[8]), dist(lm[0], lm[16]));
-  // thumbs-up: thumb tip clearly above its own joints and the index knuckle
-  const thumbUp = lm[4].y < lm[3].y && lm[3].y < lm[2].y ? clamp(((lm[5].y - lm[4].y) / palm - 0.25) / 0.5, 0, 1) : 0;
+  const middleUp = e.middle > 0.7 && e.index < 0.5 && e.ring < 0.5 && e.pinky < 0.5 &&
+    dist(P[0], P[12]) > 1.25 * Math.max(dist(P[0], P[8]), dist(P[0], P[16]));
+
   const raw = {
-    point: e.index * (1 - e.middle) * (1 - e.ring) * (1 - e.pinky) * thumbAway * (1 - heart),
+    open: e.index * e.middle * e.ring * e.pinky * clamp((tips - 0.2) / 0.15, 0, 1),   // not an OK sign
+    point: e.index * folded * clamp((tips - 0.3) / 0.25, 0, 1) * (1 - heart),          // thumb tucked away
     victory: e.index * e.middle * (1 - e.ring) * (1 - e.pinky),
-    middle: middleUp ? e.middle : 0,
-    open: Math.pow((e.thumb + e.index + e.middle + e.ring + e.pinky) / 5, 2),
-    like: curled * thumbUp * (1 - heart),
-    fist: curled * (1 - thumbUp) * (1 - heart),
-    heart: heart * 2,
-    pinch: clamp((0.08 - pinchDist) / 0.04, 0, 1),
+    middle: middleUp ? 1 : 0,
+    like,
+    dislike,
+    heart: 1.5 * heart,
+    fist: (1 - e.index) * folded * (1 - Math.max(like, dislike, heart)),
+    // "pinch" always shows while a pinch is being acted on; otherwise only
+    // when the tips touch and nothing else describes the hand better
+    pinch: pinched ? 3 : 0.6 * clamp((0.3 - tips) / 0.12, 0, 1),
+    hand: 0.15,                                                   // none of the above
   };
   const sum = Object.values(raw).reduce((a, b) => a + b, 0) + 0.05;
   const scores = {};
   for (const k in raw) scores[k] = raw[k] / sum;
-  return { pinchDist, scores };
-}
-
-// Closest approach of segments p1-p2 and q1-q2 in the image plane: the gap d,
-// and where it happens along each (t on p, u on q, 0 = start, 1 = end).
-function segmentContact(p1, p2, q1, q2) {
-  const dx = p2.x - p1.x, dy = p2.y - p1.y, ex = q2.x - q1.x, ey = q2.y - q1.y;
-  const rx = p1.x - q1.x, ry = p1.y - q1.y;
-  const a = dx * dx + dy * dy, e = ex * ex + ey * ey, f = ex * rx + ey * ry;
-  const c = dx * rx + dy * ry, b = dx * ex + dy * ey, den = a * e - b * b;
-  let t = den > 1e-12 ? clamp((b * f - c * e) / den, 0, 1) : 0;
-  let u = (b * t + f) / Math.max(e, 1e-12);
-  if (u < 0) { u = 0; t = clamp(-c / Math.max(a, 1e-12), 0, 1); }
-  else if (u > 1) { u = 1; t = clamp((b - c) / Math.max(a, 1e-12), 0, 1); }
-  const d = Math.hypot(p1.x + dx * t - (q1.x + ex * u), p1.y + dy * t - (q1.y + ey * u));
-  return { d, t, u };
+  return { scores };
 }
 
 // Map the index knuckle to the screen: the central 0.3–0.8 of the camera frame
@@ -301,10 +310,10 @@ function onHand(lm) {
   pos = smooth(pos, knuckleToScreen({ x: (lm[5].x + lm[9].x) / 2, y: (lm[5].y + lm[9].y) / 2 }), dt);
   cursor.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
 
-  const g = gestures(lm);
+  const isDown = pinchState(pinchDistance(lm), pinch.down);
+  const g = gestures(lm, isDown);
   dispatchEvent(new CustomEvent("handframe", { detail: { pts: lm.map((p) => ({ x: p.x, y: p.y })), scores: g.scores } }));
 
-  const isDown = pinchState(g.pinchDist, pinch.down);
   // the cursor dot grows as the fingers close, so the visitor sees how near a pinch is
   cursor.style.setProperty("--near", pinchDist == null ? "0" : clamp((0.1 - pinchDist) / (0.1 - PINCH_DOWN), 0, 1).toFixed(2));
   // Scroll follows the hand in the camera frame, not the cursor: the cursor
@@ -337,7 +346,7 @@ function stableLabel(top) {
   if (top === shownLabel.key) { shownLabel.cand = null; return top; }
   if (top !== shownLabel.cand) { shownLabel.cand = top; shownLabel.frames = 0; }
   shownLabel.frames++;
-  if (shownLabel.frames >= (top === "middle" ? 5 : top === "heart" ? 3 : 2) || shownLabel.key == null) { shownLabel.key = top; shownLabel.cand = null; }
+  if (shownLabel.frames >= (top === "middle" ? 5 : top === "heart" ? 4 : 2) || shownLabel.key == null) { shownLabel.key = top; shownLabel.cand = null; }
   return shownLabel.key;
 }
 

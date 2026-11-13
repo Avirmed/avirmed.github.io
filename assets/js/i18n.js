@@ -85,9 +85,11 @@ window.I18N = {
     "g.open": "Дэлгэсэн алга",
     "g.fist": "Нударга",
     "g.like": "Лайк 👍",
+    "g.dislike": "Дислайк 👎",
     "g.middle": "...😅",
     "g.heart": "Зүрх 🫰",
     "g.victory": "Ялалт ✌",
+    "g.hand": "Гар",
     "g.none": "Гар алга",
 
     "a.morinkhuur": "Морин хуур тоглох",
@@ -182,9 +184,11 @@ window.I18N = {
     "g.open": "Open palm",
     "g.fist": "Fist",
     "g.like": "Like 👍",
+    "g.dislike": "Dislike 👎",
     "g.middle": "...😅",
     "g.heart": "Finger heart 🫰",
     "g.victory": "Victory ✌",
+    "g.hand": "Hand",
     "g.none": "No hand",
 
     "a.morinkhuur": "Playing morin khuur",
