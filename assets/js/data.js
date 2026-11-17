@@ -6,8 +6,8 @@ window.SITE = {
   me: "Avirmed Enkhbat",
 
   stats: [
-    { value: 11, label: { mn: "Бүтээл", en: "Publications" } },
-    { value: 68, label: { mn: "Ишлэл (Scholar)", en: "Citations (Scholar)" } },
+    { value: 13, label: { mn: "Бүтээл", en: "Publications" } },
+    { value: 78, label: { mn: "Ишлэл (ResearchGate)", en: "Citations (ResearchGate)" } },
     { value: 6, label: { mn: "IEEE / MDPI сэтгүүл", en: "IEEE / MDPI journals" } },
     { value: 2024, label: { mn: "Ph.D., NCU Тайвань", en: "Ph.D., NCU Taiwan" }, plain: true },
   ],
@@ -21,6 +21,20 @@ window.SITE = {
   },
 
   publications: [
+    {
+      year: 2026, type: "journal", topics: ["vision"],
+      title: "Performance Analysis YOLO11n Model for Chili Leaf Diseases Detection",
+      authors: ["Rayyan Nur Fauzan", "Avirmed Enkhbat", "Ervin Yohannes", "Ricky Eka Putra"],
+      venue: "Journal of Information Engineering and Educational Technology", volume: "10", pages: "14–25",
+      doi: "10.26740/jieet.v10n01.p14-25",
+    },
+    {
+      year: 2026, type: "conference", topics: ["action"],
+      title: "Deep Sequential Modeling of WiFi Channel State Information for Human Activity Recognition",
+      authors: ["Ervin Yohannes", "Reza Pahlevi", "Yuni Yamasari", "Anita Qoiriah", "Chih-Yang Lin", "Fitri Utaminingrum", "Thai Duy Quy", "Pimpa Cheewaprakobkit", "Avirmed Enkhbat"],
+      venue: "2026 IEEE 8th Symposium on Computers & Informatics (ISCI)", pages: "1–6",
+      doi: "10.1109/ISCI69762.2026.11763319",
+    },
     {
       year: 2025, type: "journal", topics: ["vision"],
       title: "Hyperspectral Image Classification on a Multiscale 3D Convolutional Neural Network",
