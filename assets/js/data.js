@@ -7,7 +7,7 @@ window.SITE = {
 
   stats: [
     { value: 13, label: { mn: "Бүтээл", en: "Publications" } },
-    { value: 78, label: { mn: "Ишлэл (ResearchGate)", en: "Citations (ResearchGate)" } },
+    { value: 78, label: { mn: "Ишлэл", en: "Citations" } },
     { value: 6, label: { mn: "IEEE / MDPI сэтгүүл", en: "IEEE / MDPI journals" } },
     { value: 2024, label: { mn: "Ph.D., NCU Тайвань", en: "Ph.D., NCU Taiwan" }, plain: true },
   ],
