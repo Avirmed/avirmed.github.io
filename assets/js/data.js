@@ -170,11 +170,6 @@ window.SITE = {
       terms: { mn: "Намар 2025, 2026 · Хавар 2026", en: "Fall 2025, 2026 · Spring 2026" },
     },
     {
-      code: "ICSI687", credits: 3,
-      title: { mn: "Өгөгдлийн уурхай, олборлолт", en: "Data Mining" },
-      terms: { mn: "Хавар 2026", en: "Spring 2026" },
-    },
-    {
       code: "CSII201", credits: 3,
       title: { mn: "Программчлалын хэл", en: "Programming Languages" },
       terms: { mn: "Хавар 2026", en: "Spring 2026" },
