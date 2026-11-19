@@ -8,7 +8,7 @@ window.SITE = {
   stats: [
     { value: 13, label: { mn: "Бүтээл", en: "Publications" } },
     { value: 78, label: { mn: "Ишлэл", en: "Citations" } },
-    { value: 8, label: { mn: "Олон улсын сэтгүүл", en: "International journals" } },
+    { value: 6, label: { mn: "Олон улсын сэтгүүл", en: "International journals" } },
     { value: 2024, label: { mn: "Ph.D., NCU Тайвань", en: "Ph.D., NCU Taiwan" }, plain: true },
   ],
 
